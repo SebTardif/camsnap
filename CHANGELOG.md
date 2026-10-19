@@ -2,6 +2,9 @@
 
 ## 0.6.1 - Unreleased
 
+- Move macOS CI and release builds to Xcode 27 runners, retaining macOS 14 compatibility and checking Intel binaries under Rosetta; add non-publishing release dry runs.
+- Build with Go 1.27.2 to fix reachable standard-library vulnerabilities while retaining the Go 1.27.0 source minimum; use a compatible golangci-lint release.
+
 ## 0.6.0 - 2026-09-30
 
 **Highlights:** Linux camera discovery, flexible device selection, and PTZ through standard V4L2 absolute controls.
