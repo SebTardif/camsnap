@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.6.2 - Unreleased
+
 ## 0.6.1 - 2026-10-20
 
 **Highlights:** Fix certificate validation vulnerability GO-2026-6809 in release binaries.
