@@ -11,6 +11,8 @@ import (
 	"github.com/steipete/camsnap/internal/discovery"
 )
 
+var discoverDevices = discovery.Discover
+
 func newDiscoverCmd() *cobra.Command {
 	var timeout time.Duration
 	var includeInfo bool
@@ -19,12 +21,9 @@ func newDiscoverCmd() *cobra.Command {
 		Short: "Discover cameras on the local network via ONVIF WS-Discovery",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			sty := newStyler(cmd.OutOrStdout())
-			ctx, cancel := context.WithTimeout(context.Background(), timeout)
-			defer cancel()
-
-			cfg, _, _ := loadConfigFromFlag(cmd)
-
-			devs, err := discovery.Discover(ctx, timeout)
+			discoverCtx, discoverCancel := context.WithTimeout(context.Background(), timeout)
+			devs, err := discoverDevices(discoverCtx, timeout)
+			discoverCancel()
 			if err != nil {
 				return err
 			}
@@ -32,11 +31,17 @@ func newDiscoverCmd() *cobra.Command {
 				cmd.Println(sty.Warn("No devices found. Ensure cameras and this host are on the same LAN."))
 				return nil
 			}
+			cfg, _, _ := loadConfigFromFlag(cmd)
 			for _, d := range devs {
 				infoStr := ""
 				if includeInfo {
-					info := fetchInfo(ctx, cfg, d)
-					if info != "" {
+					infoCtx, infoCancel := context.WithTimeout(context.Background(), timeout)
+					info, infoErr := fetchInfo(infoCtx, cfg, d)
+					infoCancel()
+					switch {
+					case infoErr != nil:
+						infoStr = " [info failed: " + infoErr.Error() + "]"
+					case info != "":
 						infoStr = " [" + info + "]"
 					}
 				}
@@ -67,12 +72,12 @@ func safeName(host string) string {
 	return strings.ReplaceAll(host, ":", "-")
 }
 
-func fetchInfo(ctx context.Context, cfg config.Config, d discovery.Device) string {
+func fetchInfo(ctx context.Context, cfg config.Config, d discovery.Device) (string, error) {
 	// If we already have creds for this host, try them first.
 	user, pass := findCreds(cfg, d.Host)
 	info, err := discovery.FetchDeviceInfo(ctx, d.Address, user, pass)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	parts := []string{}
 	if info.Model != "" {
@@ -84,7 +89,7 @@ func fetchInfo(ctx context.Context, cfg config.Config, d discovery.Device) strin
 	if info.Manufacturer != "" {
 		parts = append(parts, info.Manufacturer)
 	}
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, ", "), nil
 }
 
 func findCreds(cfg config.Config, host string) (string, string) {
