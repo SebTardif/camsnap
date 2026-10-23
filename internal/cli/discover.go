@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"time"
@@ -21,9 +22,12 @@ func newDiscoverCmd() *cobra.Command {
 		Short: "Discover cameras on the local network via ONVIF WS-Discovery",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			sty := newStyler(cmd.OutOrStdout())
-			discoverCtx, discoverCancel := context.WithTimeout(context.Background(), timeout)
+			discoverCtx, discoverCancel := context.WithTimeout(cmd.Context(), timeout)
 			devs, err := discoverDevices(discoverCtx, timeout)
 			discoverCancel()
+			if cmd.Context().Err() != nil {
+				return cmd.Context().Err()
+			}
 			if err != nil {
 				return err
 			}
@@ -35,12 +39,16 @@ func newDiscoverCmd() *cobra.Command {
 			for _, d := range devs {
 				infoStr := ""
 				if includeInfo {
-					infoCtx, infoCancel := context.WithTimeout(context.Background(), timeout)
+					infoCtx, infoCancel := context.WithTimeout(cmd.Context(), timeout)
 					info, infoErr := fetchInfo(infoCtx, cfg, d)
 					infoCancel()
 					switch {
 					case infoErr != nil:
-						infoStr = " [info failed: " + infoErr.Error() + "]"
+						hint := "; check the ONVIF endpoint and saved camera credentials"
+						if errors.Is(infoErr, context.DeadlineExceeded) {
+							hint = "; retry with a longer --timeout"
+						}
+						infoStr = " [info failed: " + infoErr.Error() + hint + "]"
 					case info != "":
 						infoStr = " [" + info + "]"
 					}
@@ -52,7 +60,7 @@ func newDiscoverCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().DurationVar(&timeout, "timeout", 3*time.Second, "Discovery timeout")
+	cmd.Flags().DurationVar(&timeout, "timeout", 3*time.Second, "Timeout for discovery and each device-information request")
 	cmd.Flags().BoolVar(&includeInfo, "info", false, "Attempt ONVIF GetDeviceInformation (may require credentials)")
 	return cmd
 }
